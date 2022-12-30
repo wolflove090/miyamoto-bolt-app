@@ -1,6 +1,8 @@
 const { App } = require('@slack/bolt');
-require('dotenv').config();
-const { execSync } = require('child_process');
+require('dotenv').config(); // .env読み取り用
+const { execSync } = require('child_process'); // bash叩く用
+
+const exportFolder = "./slack_export_test"; // エクスポートフォルダ名
 
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
@@ -15,6 +17,22 @@ const app = new App({
 // メッセージに反応してアクションを発火
 app.message('hoge', async ({ message, say }) => {
   const channel = "C04FSRFRE7N";
+
+  console.log("出力");
+
+  // エクスポート対象のフォルダが無ければ作成
+  var fs = require("fs");
+  if(!fs.existsSync(exportFolder))
+  {
+    fs.mkdirSync(exportFolder);
+    console.log("エクスポートフォルダを作成しました。必要なjsonファイルが存在するか確認してください");
+  }
+
+  // ユーザー情報の保存
+  await writeUsersJson();
+
+  // チャンネル情報の保存
+  await writeChannelsJson();
 
   // 会話情報を取得
   var history = await getHistory(channel);
@@ -70,16 +88,65 @@ app.message('hoge', async ({ message, say }) => {
   // 保持したスレッドメッセージを末尾に追加
   var result = history.concat(threadMessages);
   
-  //console.log(result);
-
   // json形式で書き出し
   result = JSON.stringify(result);
   console.log(result);
-  await writeExportFile("test", result);
+  // TODO チャンネル名指定できるように
+  await writeExportFile("ほげほげ", result);
 
   // 書き出し対象をzip化
   await forZip("./slack_export_test", "slack_export_test.zip");
 });
+
+// チャンネル情報の書き出し
+async function writeChannelsJson()
+{
+  const response = await app.client.conversations.list();
+  var channels =  response.channels;
+  channels = JSON.stringify(channels);
+
+  var fs = require("fs");
+  const filePath = exportFolder + "/channels.json";
+
+  // jsonファイルの書き出し
+  try
+  {
+    fs.writeFileSync(filePath, channels);
+  }
+  catch(e)
+  {
+    console.log(e);
+  }
+
+  return new Promise((resolve, reject) => {
+    resolve("success");
+    });
+}
+
+// ユーザー一覧の書き出し
+async function writeUsersJson()
+{
+  const response = await app.client.users.list();
+  var users = response.members;
+  users = JSON.stringify(users);
+
+  var fs = require("fs");
+  const filePath = exportFolder + "/users.json";
+
+  // jsonファイルの書き出し
+  try
+  {
+    fs.writeFileSync(filePath, users);
+  }
+  catch(e)
+  {
+    console.log(e);
+  }
+
+  return new Promise((resolve, reject) => {
+    resolve("success");
+    });
+}
 
 // 1. 履歴の取得
 async function getHistory(channel)
@@ -112,11 +179,13 @@ function addFileToken(message)
 {
   const token = process.env.SLACK_FILE_TOKEN;
 
+  // ファイルが存在するメッセージを解析してトークンを付与
   if(message.files && message.files.length > 0)
   {
     console.log("ファイルが付与されたメッセージ");
     message.files.forEach(file => 
     {
+       // 直指定でトークンを付与 
         file.url_private += `?t=${token}`;
         file.url_private_download += `?t=${token}`;
         file.thumb_64 += `?t=${token}`;
@@ -135,16 +204,8 @@ async function writeExportFile(channelName, history)
 {
   var fs = require("fs");
 
-  const exportFolder = "./slack_export_test";
   const channelFolder = exportFolder + "/" + channelName;
   const filePath = channelFolder + "/2022-12-23.json";
-
-  // エクスポート対象のフォルダが無ければ作成
-  if(!fs.existsSync(exportFolder))
-  {
-    fs.mkdirSync(exportFolder);
-    console.log("エクスポートフォルダを作成しました。必要なjsonファイルが存在するか確認してください");
-  }
 
   // 対象チャンネルのフォルダが無ければ作成
   if(!fs.existsSync(channelFolder))
