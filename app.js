@@ -1,5 +1,6 @@
 const { App } = require('@slack/bolt');
 require('dotenv').config();
+const { execSync } = require('child_process');
 
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
@@ -11,6 +12,7 @@ const app = new App({
   port: process.env.PORT || 3000
 });
 
+// メッセージに反応してアクションを発火
 app.message('hoge', async ({ message, say }) => {
   const channel = "C04FSRFRE7N";
 
@@ -18,7 +20,7 @@ app.message('hoge', async ({ message, say }) => {
   var history = await getHistory(channel);
   var threadMessages = [];
   
-  console.log("メッセージ出力なんだなぁ");
+  console.log("メッセージ出力");
   
   // 会話情報を一つづつ解析し、スレッド情報を取得
   await (async () => {
@@ -63,7 +65,14 @@ app.message('hoge', async ({ message, say }) => {
   var result = history.concat(threadMessages);
   
   //console.log(result);
-  console.log(JSON.stringify(result));
+
+  // json形式で書き出し
+  result = JSON.stringify(result);
+  console.log(result);
+  await writeExportFile("test", result);
+
+  // 書き出し対象をzip化
+  await forZip("./slack_export_test", "slack_export_test.zip");
 });
 
 // 1. 履歴の取得
@@ -92,9 +101,55 @@ async function getReplies(channel, ts)
   });
 }
 
+// ファイルに保存
+async function writeExportFile(channelName, history)
+{
+  var fs = require("fs");
+
+  const exportFolder = "./slack_export_test";
+  const channelFolder = exportFolder + "/" + channelName;
+  const filePath = channelFolder + "/2022-12-23.json";
+
+  // エクスポート対象のフォルダが無ければ作成
+  if(!fs.existsSync(exportFolder))
+  {
+    fs.mkdirSync(exportFolder);
+    console.log("エクスポートフォルダを作成しました。必要なjsonファイルが存在するか確認してください");
+  }
+
+  // 対象チャンネルのフォルダが無ければ作成
+  if(!fs.existsSync(channelFolder))
+  {
+    fs.mkdirSync(channelFolder);
+  }
+
+  // jsonファイルの書き出し
+  try
+  {
+    fs.writeFileSync(filePath, history);
+    console.log("end");
+  }catch(e)
+  {
+    console.log(e);
+  }
+
+  return new Promise((resolve, reject) => {
+    resolve("success");
+    });
+}
+
+// zip化
+async function forZip(targetPath, exportPath)
+{
+  execSync(`zip -r ${exportPath} ${targetPath}`)
+
+  return new Promise((resolve, reject) => {
+    resolve("success");
+    });
+}
+
 (async () => {
   // アプリを起動します
   await app.start();
-
   console.log('⚡️ Bolt app is running!');
 })();
