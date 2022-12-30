@@ -24,12 +24,15 @@ app.message('hoge', async ({ message, say }) => {
   
   // 会話情報を一つづつ解析し、スレッド情報を取得
   await (async () => {
-    for await (message of history) {
+    for await (message of history) 
+    {
+      // ファイルトークンの付与
+      message = addFileToken(message);
+
       const ts = message.ts;
       const replies = await getReplies(channel, ts)
       
       var items = [];
-      
       var count = 0;
       
       // スレッドを1つづつ解析し、スレッド情報とメッセージ情報を保持
@@ -39,6 +42,9 @@ app.message('hoge', async ({ message, say }) => {
         count += 1;
         if(count == 1)
           return;
+
+        // ファイルトークンの付与
+        thread = addFileToken(thread);
         
         //console.log(thread)
         // スレッド情報を保持
@@ -99,6 +105,29 @@ async function getReplies(channel, ts)
   return new Promise((resolve, reject) => {
   resolve(replies.messages);
   });
+}
+
+// ファイルメッセージのトークン付与
+function addFileToken(message)
+{
+  const token = process.env.SLACK_FILE_TOKEN;
+
+  if(message.files && message.files.length > 0)
+  {
+    console.log("ファイルが付与されたメッセージ");
+    message.files.forEach(file => 
+    {
+        file.url_private += `?t=${token}`;
+        file.url_private_download += `?t=${token}`;
+        file.thumb_64 += `?t=${token}`;
+        file.thumb_80 += `?t=${token}`;
+        file.thumb_360 += `?t=${token}`;
+        file.thumb_480 += `?t=${token}`;
+        file.thumb_160 += `?t=${token}`;
+    });
+  }
+
+  return message;
 }
 
 // ファイルに保存
