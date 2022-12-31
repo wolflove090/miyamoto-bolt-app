@@ -34,63 +34,8 @@ app.message('hoge', async ({ message, say }) => {
   // チャンネル情報の保存
   await writeChannelsJson();
 
-  // 会話情報を取得
-  var history = await getHistory(channel);
-  var threadMessages = [];
-  
-  // 会話情報を一つづつ解析し、スレッド情報を取得
-  await (async () => {
-    for await (message of history) 
-    {
-      // ファイルトークンの付与
-      message = addFileToken(message);
-
-      const ts = message.ts;
-      const replies = await getReplies(channel, ts)
-      
-      var items = [];
-      var count = 0;
-      
-      // スレッドを1つづつ解析し、スレッド情報とメッセージ情報を保持
-      replies.forEach(thread => 
-      {
-        // 最初のメッセージは自身のものなので除外
-        count += 1;
-        if(count == 1)
-          return;
-
-        // ファイルトークンの付与
-        thread = addFileToken(thread);
-        
-        //console.log(thread)
-        // スレッド情報を保持
-        const user = thread.user;
-        const ts = thread.ts;
-        
-        items.push({
-        "user": user,
-        "ts": ts
-        })
-        
-        // スレッドメーセージを保持
-        threadMessages.push(thread);
-      });
-      
-      if(items.length > 0)
-      {
-        message.replies = items;
-      }
-    }
-  })();
-  
-  // 保持したスレッドメッセージを末尾に追加
-  var result = history.concat(threadMessages);
-  
-  // json形式で書き出し
-  result = JSON.stringify(result);
-  console.log(result);
-  // TODO チャンネル名指定できるように
-  await writeExportFile("ほげほげ", result);
+  // チャンネルメッセージの書き出し
+  await writeChannelHistoryJson(channel, "hoge");
 
   // 書き出し対象をzip化
   await forZip("./slack_export_test", "slack_export_test.zip");
@@ -98,7 +43,7 @@ app.message('hoge', async ({ message, say }) => {
   console.log("Export completed!!")
 });
 
-// チャンネル情報の書き出し
+// 1.チャンネル情報の書き出し
 async function writeChannelsJson()
 {
   // チャンネル一覧の取得
@@ -135,7 +80,7 @@ async function writeChannelsJson()
     });
 }
 
-// チャンネル参加メンバーを取得
+// 2.チャンネル参加メンバーを取得
 async function getChannelMembers(channelId)
 {
   const response = await app.client.conversations.members({
@@ -172,7 +117,71 @@ async function writeUsersJson()
     });
 }
 
-// 1. 履歴の取得
+// 3. 履歴jsonの書き出し
+async function writeChannelHistoryJson(channelId, channelName)
+{
+  // 会話情報を取得
+  var history = await getHistory(channelId);
+  var threadMessages = [];
+  
+  // 会話情報を一つづつ解析し、スレッド情報を取得
+  await (async () => {
+    for await (message of history) 
+    {
+      // ファイルトークンの付与
+      message = addFileToken(message);
+
+      const ts = message.ts;
+      const replies = await getReplies(channelId, ts)
+      
+      var items = [];
+      var count = 0;
+      
+      // スレッドを1つづつ解析し、スレッド情報とメッセージ情報を保持
+      replies.forEach(thread => 
+      {
+        // 最初のメッセージは自身のものなので除外
+        count += 1;
+        if(count == 1)
+          return;
+
+        // ファイルトークンの付与
+        thread = addFileToken(thread);
+        
+        // スレッド情報を保持
+        const user = thread.user;
+        const ts = thread.ts;
+        
+        items.push({
+        "user": user,
+        "ts": ts
+        })
+        
+        // スレッドメーセージを保持
+        threadMessages.push(thread);
+      });
+      
+      if(items.length > 0)
+      {
+        message.replies = items;
+      }
+    }
+  })();
+  
+  // 保持したスレッドメッセージを末尾に追加
+  var result = history.concat(threadMessages);
+  
+  // json形式で書き出し
+  result = JSON.stringify(result);
+  console.log(result);
+  await writeExportFile(channelName, result);
+
+  return new Promise((resolve, reject) => {
+    resolve("success");
+    });
+}
+
+// 3.1. 履歴の取得
 async function getHistory(channel)
 {
   const history = await app.client.conversations.history({
@@ -185,7 +194,7 @@ async function getHistory(channel)
   });
 }
 
-// 2. スレッドの取得
+// 3.2. スレッドの取得
 async function getReplies(channel, ts)
 {
   const replies = await app.client.conversations.replies({
@@ -198,7 +207,7 @@ async function getReplies(channel, ts)
   });
 }
 
-// ファイルメッセージのトークン付与
+// 3.3. ファイルメッセージのトークン付与
 function addFileToken(message)
 {
   const token = process.env.SLACK_FILE_TOKEN;
@@ -223,7 +232,7 @@ function addFileToken(message)
   return message;
 }
 
-// ファイルに保存
+// 3.4. ファイルに保存
 async function writeExportFile(channelName, history)
 {
   var fs = require("fs");
@@ -252,7 +261,7 @@ async function writeExportFile(channelName, history)
     });
 }
 
-// zip化
+// 4. zip化
 async function forZip(targetPath, exportPath)
 {
   execSync(`zip -r ${exportPath} ${targetPath}`)
