@@ -17,7 +17,8 @@ const app = new App({
 // メッセージに反応してアクションを発火
 app.message('hoge', async ({ message, say }) => {
   // 対象のチャンネルIDを指定します
-  const targetChannels = ["C04FSRFRE7N", "C022N4ZP3EF"];
+  //const targetChannels = ["C04FSRFRE7N", "C022N4ZP3EF"];
+  const targetChannels = ["C04FSRFRE7N"];
 
   console.log("出力");
 
@@ -154,16 +155,10 @@ async function writeChannelHistoryJson(channelId, channelName)
       const replies = await getReplies(channelId, ts)
       
       var items = [];
-      var count = 0;
       
       // スレッドを1つづつ解析し、スレッド情報とメッセージ情報を保持
       replies.forEach(thread => 
       {
-        // 最初のメッセージは自身のものなので除外
-        count += 1;
-        if(count == 1)
-          return;
-
         // ファイルトークンの付与
         thread = addFileToken(thread);
         
@@ -203,26 +198,73 @@ async function writeChannelHistoryJson(channelId, channelName)
 // 3.1. 履歴の取得
 async function getHistory(channel)
 {
-  const history = await app.client.conversations.history({
-  channel: channel,
-  include_all_metadata: true,
-  });
+  var history = [];
+
+  var cursor = "";
+  while (true)
+  {
+    const response = await app.client.conversations.history({
+      channel: channel,
+      include_all_metadata: true,
+      cursor: cursor,
+      //limit: 5, カーソルテスト用
+      });
+
+      history = history.concat(response.messages);
+
+      // 次のメッセージが無ければ抜ける
+      if(response.has_more == false)
+      {
+        break;
+      }
+
+      console.log(`次のメッセージがある${cursor}`);
+
+      cursor = response.response_metadata.next_cursor;
+  }
 
   return new Promise((resolve, reject) => {
-  resolve(history.messages);
+  resolve(history);
   });
 }
 
 // 3.2. スレッドの取得
 async function getReplies(channel, ts)
 {
-  const replies = await app.client.conversations.replies({
-  channel: channel,
-  ts: ts,
-  });
+  var history = [];
+
+  var cursor = "";
+  while (true)
+  {
+    const response = await app.client.conversations.replies({
+      channel: channel,
+      ts: ts,
+      cursor: cursor,
+      // limit: 1, カーソルテスト用
+      });
+
+      // スレッド主もレスポンスに入ってくるためそれ以外を挿入
+      response.messages.forEach(repli => 
+        {
+          if(repli.ts != ts)
+          {
+            history.push(repli);
+          }
+        });
+
+      // 次のメッセージが無ければ抜ける
+      if(response.has_more == false)
+      {
+        break;
+      }
+
+      console.log(`次のメッセージがある${cursor}`);
+
+      cursor = response.response_metadata.next_cursor;
+  }
 
   return new Promise((resolve, reject) => {
-  resolve(replies.messages);
+  resolve(history);
   });
 }
 
