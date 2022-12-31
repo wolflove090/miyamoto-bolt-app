@@ -16,7 +16,8 @@ const app = new App({
 
 // メッセージに反応してアクションを発火
 app.message('hoge', async ({ message, say }) => {
-  const channel = "C04FSRFRE7N";
+  // 対象のチャンネルIDを指定します
+  const targetChannels = ["C04FSRFRE7N", "C022N4ZP3EF"];
 
   console.log("出力");
 
@@ -32,10 +33,16 @@ app.message('hoge', async ({ message, say }) => {
   await writeUsersJson();
 
   // チャンネル情報の保存
-  await writeChannelsJson();
+  var channels = await writeChannelsJson(targetChannels);
 
-  // チャンネルメッセージの書き出し
-  await writeChannelHistoryJson(channel, "hoge");
+  // 対象のチャンネルのみ書き出し
+  await (async () => {
+    for await (channel of channels) 
+    {
+        // チャンネルメッセージの書き出し
+        await writeChannelHistoryJson(channel.id, channel.name);
+    }
+  })();
 
   // 書き出し対象をzip化
   await forZip("./slack_export_test", "slack_export_test.zip");
@@ -44,15 +51,26 @@ app.message('hoge', async ({ message, say }) => {
 });
 
 // 1.チャンネル情報の書き出し
-async function writeChannelsJson()
+async function writeChannelsJson(targetChannels)
 {
   // チャンネル一覧の取得
   const response = await app.client.conversations.list();
   var channels =  response.channels;
+  var result = [];
+
+  channels.forEach(ch => 
+    {
+      // 対象チャンネルのみ収集
+      if(targetChannels.includes(ch.id))
+      {
+        console.log(`対象チャンネル：${ch.name}`);
+        result.push(ch);
+      }
+    })
 
   // 各チャンネルのメンバー情報を個別で取得
   await (async () => {
-    for await (channel of channels) 
+    for await (channel of result) 
     {
       const channelId = channel.id;
       const members = await getChannelMembers(channelId);
@@ -60,7 +78,8 @@ async function writeChannelsJson()
     }
   })();
 
-  channels = JSON.stringify(channels);
+  // jsonString変換
+  const resultJson = JSON.stringify(result, null, '\t');
 
   var fs = require("fs");
   const filePath = exportFolder + "/channels.json";
@@ -68,7 +87,7 @@ async function writeChannelsJson()
   // jsonファイルの書き出し
   try
   {
-    fs.writeFileSync(filePath, channels);
+    fs.writeFileSync(filePath, resultJson);
   }
   catch(e)
   {
@@ -76,7 +95,7 @@ async function writeChannelsJson()
   }
 
   return new Promise((resolve, reject) => {
-    resolve("success");
+    resolve(result);
     });
 }
 
@@ -97,7 +116,7 @@ async function writeUsersJson()
 {
   const response = await app.client.users.list();
   var users = response.members;
-  users = JSON.stringify(users);
+  users = JSON.stringify(users, null, '\t');
 
   var fs = require("fs");
   const filePath = exportFolder + "/users.json";
@@ -172,7 +191,7 @@ async function writeChannelHistoryJson(channelId, channelName)
   var result = history.concat(threadMessages);
   
   // json形式で書き出し
-  result = JSON.stringify(result);
+  result = JSON.stringify(result, null, '\t');
   console.log(result);
   await writeExportFile(channelName, result);
 
@@ -238,7 +257,7 @@ async function writeExportFile(channelName, history)
   var fs = require("fs");
 
   const channelFolder = exportFolder + "/" + channelName;
-  const filePath = channelFolder + "/2022-12-23.json";
+  const filePath = channelFolder + "/history.json";
 
   // 対象チャンネルのフォルダが無ければ作成
   if(!fs.existsSync(channelFolder))
