@@ -38,8 +38,6 @@ app.message('hoge', async ({ message, say }) => {
   var history = await getHistory(channel);
   var threadMessages = [];
   
-  console.log("メッセージ出力");
-  
   // 会話情報を一つづつ解析し、スレッド情報を取得
   await (async () => {
     for await (message of history) 
@@ -96,13 +94,27 @@ app.message('hoge', async ({ message, say }) => {
 
   // 書き出し対象をzip化
   await forZip("./slack_export_test", "slack_export_test.zip");
+
+  console.log("Export completed!!")
 });
 
 // チャンネル情報の書き出し
 async function writeChannelsJson()
 {
+  // チャンネル一覧の取得
   const response = await app.client.conversations.list();
   var channels =  response.channels;
+
+  // 各チャンネルのメンバー情報を個別で取得
+  await (async () => {
+    for await (channel of channels) 
+    {
+      const channelId = channel.id;
+      const members = await getChannelMembers(channelId);
+      channel.members = members;
+    }
+  })();
+
   channels = JSON.stringify(channels);
 
   var fs = require("fs");
@@ -120,6 +132,18 @@ async function writeChannelsJson()
 
   return new Promise((resolve, reject) => {
     resolve("success");
+    });
+}
+
+// チャンネル参加メンバーを取得
+async function getChannelMembers(channelId)
+{
+  const response = await app.client.conversations.members({
+    channel: channelId
+  });
+
+  return new Promise((resolve, reject) => {
+    resolve(response.members);
     });
 }
 
