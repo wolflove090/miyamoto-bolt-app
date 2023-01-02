@@ -27,7 +27,6 @@ app.message('hoge', async ({ message, say }) => {
   if(!fs.existsSync(exportFolder))
   {
     fs.mkdirSync(exportFolder);
-    console.log("エクスポートフォルダを作成しました。必要なjsonファイルが存在するか確認してください");
   }
 
   // ユーザー情報の保存
@@ -54,9 +53,28 @@ app.message('hoge', async ({ message, say }) => {
 // 1.チャンネル情報の書き出し
 async function writeChannelsJson(targetChannels)
 {
-  // チャンネル一覧の取得
-  const response = await app.client.conversations.list();
-  var channels =  response.channels;
+  var channels = [];
+
+  var cursor = "";
+  while (true)
+  {
+      // チャンネル一覧の取得
+      const response = await app.client.conversations.list({
+       types: "public_channel,private_channel",
+       cursor: cursor,
+      });
+
+      channels = channels.concat(response.channels);
+
+      // 次のチャンネルが無ければ抜ける
+      if(response.response_metadata && response.response_metadata.next_cursor == "")
+      {
+        break;
+      }
+      console.log(`次のチャンネルがある${cursor}`);
+      cursor = response.response_metadata.next_cursor;
+  }
+
   var result = [];
 
   channels.forEach(ch => 
@@ -100,7 +118,7 @@ async function writeChannelsJson(targetChannels)
     });
 }
 
-// 2.チャンネル参加メンバーを取得
+// 1.1 チャンネル参加メンバーを取得
 async function getChannelMembers(channelId)
 {
   const response = await app.client.conversations.members({
@@ -112,11 +130,30 @@ async function getChannelMembers(channelId)
     });
 }
 
-// ユーザー一覧の書き出し
+// 2. ユーザー一覧の書き出し
 async function writeUsersJson()
 {
-  const response = await app.client.users.list();
-  var users = response.members;
+  var users = [];
+
+  var cursor = "";
+  while (true)
+  {
+    const response = await app.client.users.list({
+      cursor: cursor,
+    });
+
+    users = users.concat(response.members);
+
+    // 次のユーザーが無ければ抜ける
+    if(response.response_metadata && response.response_metadata.next_cursor == "")
+    {
+      break;
+    }
+
+    console.log(`次のユーザーがある${cursor}`);
+    cursor = response.response_metadata.next_cursor;
+
+  }
   users = JSON.stringify(users, null, '\t');
 
   var fs = require("fs");
