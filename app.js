@@ -16,9 +16,10 @@ const app = new App({
 
 // メッセージに反応してアクションを発火
 app.message('hoge', async ({ message, say }) => {
+
   // 対象のチャンネルIDを指定します
-  //const targetChannels = ["C04FSRFRE7N", "C022N4ZP3EF"];
-  const targetChannels = ["C04FSRFRE7N"];
+  const targetChannels = getTargetChannels(); // 直指定
+  //const targetChannels = getTargetChannelsForCsv(); // CSV指定
 
   console.log("出力");
 
@@ -49,6 +50,35 @@ app.message('hoge', async ({ message, say }) => {
 
   console.log("Export completed!!")
 });
+
+// 0. 対象のチャンネル一覧を取得する
+function getTargetChannels()
+{
+  return ["C04FSRFRE7N", "C022N4ZP3EF"];
+}
+
+// 0. 対象のチャンネル一覧を取得する
+function getTargetChannelsForCsv()
+{
+  // ローカルファイル読み取り
+  var fs = require("fs");
+  var csv = fs.readFileSync("targetChannels.csv", 'utf-8');
+  csv = csv.replace(/\r?\n/g, '');
+  const targets = csv.split(",");
+  var targetChannels = [];
+
+  // チャンネルのみ追加(頭文字が「C」のもの)
+  targets.forEach(target => 
+    {
+      const head = target.slice(0, 1);
+      if(head == "C")
+      {
+        targetChannels.push(target);
+      }
+    });
+
+  return targetChannels;
+}
 
 // 1.チャンネル情報の書き出し
 async function writeChannelsJson(targetChannels)
