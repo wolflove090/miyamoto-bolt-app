@@ -87,7 +87,7 @@ app.message('export', async ({ message, say }) => {
 // 0. 対象のチャンネル一覧を取得する
 function getTargetChannels()
 {
-  return ["C04H93YAENQ", "C04HT9LJ4GG"];
+  return ["C04FSRFRE7N"];
 }
 
 // 0. 対象のチャンネル一覧を取得する
@@ -185,12 +185,28 @@ async function writeChannelsJson(targetChannels)
 // 1.1 チャンネル参加メンバーを取得
 async function getChannelMembers(channelId)
 {
-  const response = await app.client.conversations.members({
-    channel: channelId
-  });
+  var members = [];
+  var cursor = "";
+  while (true)
+  {
+      // メンバー一覧の取得
+      const response = await app.client.conversations.members({
+        channel: channelId,
+        cursor: cursor,
+      });
+      members = members.concat(response.members);
+
+      // 次のメンバーが無ければ抜ける
+      if(response.response_metadata && response.response_metadata.next_cursor == "")
+      {
+        break;
+      }
+      console.log(`次のメンバーがある${cursor}`);
+      cursor = response.response_metadata.next_cursor;
+  }
 
   return new Promise((resolve, reject) => {
-    resolve(response.members);
+    resolve(members);
     });
 }
 
