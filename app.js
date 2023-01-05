@@ -14,6 +14,17 @@ const app = new App({
   port: process.env.PORT || 3000
 });
 
+// ユーザートークンを利用するアプリ
+const userApp = new App({
+  token: process.env.SLACK_BOT_USER_TOKEN,
+  signingSecret: process.env.SLACK_SIGNING_SECRET,
+  socketMode: true,
+  appToken: process.env.SLACK_APP_TOKEN,
+  // ソケットモードではポートをリッスンしませんが、アプリを OAuth フローに対応させる場合、
+  // 何らかのポートをリッスンする必要があります
+  port: process.env.PORT || 3000
+});
+
 // メッセージに反応してアクションを発火
 app.message('hoge', async ({ message, say }) => {
 
@@ -48,13 +59,28 @@ app.message('hoge', async ({ message, say }) => {
   // 書き出し対象をzip化
   await forZip("./slack_export_test", "slack_export_test.zip");
 
-  console.log("Export completed!!")
+  console.log("Export Completed!!");
+
+  console.log("Start Archive");
+
+  // 対象のチャンネルのリネーム & アーカイブ
+  await (async () => {
+    for await (channel of channels) 
+    {
+        // チャンネルのリネーム
+        await renameChannel(channel.id, channel.name);
+        // チャンネルのアーカイブ
+        await archiveChannel(channel.id);
+    }
+  })();
+
+  console.log("Archive Completed!!");
 });
 
 // 0. 対象のチャンネル一覧を取得する
 function getTargetChannels()
 {
-  return ["C04FSRFRE7N", "C022N4ZP3EF"];
+  return ["C04HWD5PYE4"];
 }
 
 // 0. 対象のチャンネル一覧を取得する
@@ -113,6 +139,7 @@ async function writeChannelsJson(targetChannels)
       if(targetChannels.includes(ch.id))
       {
         console.log(`対象チャンネル：${ch.name}`);
+        ch.is_private = false;
         result.push(ch);
       }
     })
@@ -393,6 +420,33 @@ async function writeExportFile(channelName, history)
 async function forZip(targetPath, exportPath)
 {
   execSync(`zip -r ${exportPath} ${targetPath}`)
+
+  return new Promise((resolve, reject) => {
+    resolve("success");
+    });
+}
+
+// 5. チャンネルのリネーム
+async function renameChannel(channelId, channelName)
+{
+  // ユーザー権限でリネーム(管理者権限が必要)
+  await userApp.client.conversations.rename({
+    channel: channelId,
+    name: channelName + "_archive"
+  })
+
+  return new Promise((resolve, reject) => {
+    resolve("success");
+    });
+}
+
+// 6. チャンネルのアーカイブ
+async function archiveChannel(channelId)
+{
+  // チャンネルのアーカイブ
+  await app.client.conversations.archive({
+    channel: channelId,
+  })
 
   return new Promise((resolve, reject) => {
     resolve("success");
