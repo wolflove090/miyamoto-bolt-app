@@ -26,7 +26,7 @@ const userApp = new App({
 });
 
 // メッセージに反応してアクションを発火
-app.message('hoge', async ({ message, say }) => {
+app.message('export', async ({ message, say }) => {
 
   // 対象のチャンネルIDを指定します
   const targetChannels = getTargetChannels(); // 直指定
@@ -46,6 +46,13 @@ app.message('hoge', async ({ message, say }) => {
 
   // チャンネル情報の保存
   var channels = await writeChannelsJson(targetChannels);
+
+  // 書き出せないチャンネルがあれば抜ける
+  if(isChannelAllExport(targetChannels, channels))
+  {
+    console.log("チャンネル書き出を停止しました。");
+    return;
+  }
 
   // 対象のチャンネルのみ書き出し
   await (async () => {
@@ -80,7 +87,7 @@ app.message('hoge', async ({ message, say }) => {
 // 0. 対象のチャンネル一覧を取得する
 function getTargetChannels()
 {
-  return ["C04HWD5PYE4"];
+  return ["C04H93YAENQ", "C04HT9LJ4GG"];
 }
 
 // 0. 対象のチャンネル一覧を取得する
@@ -185,6 +192,26 @@ async function getChannelMembers(channelId)
   return new Promise((resolve, reject) => {
     resolve(response.members);
     });
+}
+
+// 1.2 チャンネルが全て書き出せているかを確認
+function isChannelAllExport(targets, channels)
+{
+  var channelIds = [];
+  channels.forEach(channel => channelIds.push(channel.id));
+
+  var isNotTargetFind = false;
+  targets.forEach(target => 
+    {
+      if(!channelIds.includes(target))
+      {
+        console.log(`対象のチャンネルが書き出せませんでした。`);
+        console.log(`対象チャンネルにアプリが追加されているか確認してください。対象チャンネル：${target}`);
+        isNotTargetFind = true;
+      }
+    })
+
+    return isNotTargetFind;
 }
 
 // 2. ユーザー一覧の書き出し
