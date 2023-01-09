@@ -457,7 +457,7 @@ function addFileToken(message, restrictedUsers)
     // ゲストユーザーだった場合に投稿ユーザーを変更
     if(restrictedUsers.includes(message.user))
     {
-      console.log("ゲストユーザー");
+      console.log(`ゲストユーザー${message.user}`);
       message.user = process.env.SLACK_FILE_POST_MEMBER;
     }
   }
