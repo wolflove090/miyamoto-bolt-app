@@ -42,7 +42,9 @@ app.message('export', async ({ message, say }) => {
   }
 
   // ユーザー情報の保存
-  await writeUsersJson();
+  const users = await writeUsersJson();
+  // 制限ユーザーの取得
+  const restrictedUsers = getRestrictedUsers(users);
 
   // チャンネル情報の保存
   var channels = await writeChannelsJson(targetChannels);
@@ -59,7 +61,7 @@ app.message('export', async ({ message, say }) => {
     for await (channel of channels) 
     {
         // チャンネルメッセージの書き出し
-        await writeChannelHistoryJson(channel.id, channel.name);
+        await writeChannelHistoryJson(channel.id, channel.name, restrictedUsers);
     }
   })();
 
@@ -205,6 +207,9 @@ async function getChannelMembers(channelId)
       cursor = response.response_metadata.next_cursor;
   }
 
+  // 投稿用ユーザーの追加
+  members.push(process.env.SLACK_FILE_POST_MEMBER);
+
   return new Promise((resolve, reject) => {
     resolve(members);
     });
@@ -254,7 +259,7 @@ async function writeUsersJson()
     cursor = response.response_metadata.next_cursor;
 
   }
-  users = JSON.stringify(users, null, '\t');
+  const result = JSON.stringify(users, null, '\t');
 
   var fs = require("fs");
   const filePath = exportFolder + "/users.json";
@@ -262,7 +267,7 @@ async function writeUsersJson()
   // jsonファイルの書き出し
   try
   {
-    fs.writeFileSync(filePath, users);
+    fs.writeFileSync(filePath, result);
   }
   catch(e)
   {
@@ -270,12 +275,29 @@ async function writeUsersJson()
   }
 
   return new Promise((resolve, reject) => {
-    resolve("success");
+    resolve(users);
     });
 }
 
+// 2.1 ゲストユーザー一覧取得
+function getRestrictedUsers(users)
+{
+  const restrictedUsers = [];
+
+  users.forEach(user => 
+    {
+      // 制限ユーザー = ゲストユーザーなので追加
+      if(user.is_restricted == true)
+      {
+        restrictedUsers.push(user.id);
+      }
+    })
+
+    return restrictedUsers;
+}
+
 // 3. 履歴jsonの書き出し
-async function writeChannelHistoryJson(channelId, channelName)
+async function writeChannelHistoryJson(channelId, channelName, restrictedUsers)
 {
   // 会話情報を取得
   var history = await getHistory(channelId);
@@ -286,7 +308,7 @@ async function writeChannelHistoryJson(channelId, channelName)
     for await (message of history) 
     {
       // ファイルトークンの付与
-      message = addFileToken(message);
+      message = addFileToken(message, restrictedUsers);
 
       const ts = message.ts;
       const replies = await getReplies(channelId, ts)
@@ -297,7 +319,7 @@ async function writeChannelHistoryJson(channelId, channelName)
       replies.forEach(thread => 
       {
         // ファイルトークンの付与
-        thread = addFileToken(thread);
+        thread = addFileToken(thread, restrictedUsers);
         
         // スレッド情報を保持
         const user = thread.user;
@@ -406,7 +428,7 @@ async function getReplies(channel, ts)
 }
 
 // 3.3. ファイルメッセージのトークン付与
-function addFileToken(message)
+function addFileToken(message, restrictedUsers)
 {
   const token = process.env.SLACK_FILE_TOKEN;
 
@@ -424,7 +446,20 @@ function addFileToken(message)
         file.thumb_360 += `?t=${token}`;
         file.thumb_480 += `?t=${token}`;
         file.thumb_160 += `?t=${token}`;
+
+        // ゲストユーザーだった場合に投稿ユーザーを変更
+        if(restrictedUsers.includes(file.user))
+        {
+          file.user = process.env.SLACK_FILE_POST_MEMBER;
+        }
     });
+
+    // ゲストユーザーだった場合に投稿ユーザーを変更
+    if(restrictedUsers.includes(message.user))
+    {
+      console.log("ゲストユーザー");
+      message.user = process.env.SLACK_FILE_POST_MEMBER;
+    }
   }
 
   return message;
