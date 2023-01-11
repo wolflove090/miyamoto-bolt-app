@@ -25,6 +25,8 @@ const userApp = new App({
   port: process.env.PORT || 3000
 });
 
+// ==================== チャンネルエクスポート処理 ==================== //
+
 // メッセージに反応してアクションを発火
 app.message('export', async ({ message, say }) => {
 
@@ -158,7 +160,7 @@ async function writeChannelsJson(targetChannels)
     for await (channel of result) 
     {
       const channelId = channel.id;
-      const members = await getChannelMembers(channelId);
+      const members = await getChannelMembersForExport(channelId);
       channel.members = members;
     }
   })();
@@ -185,7 +187,7 @@ async function writeChannelsJson(targetChannels)
 }
 
 // 1.1 チャンネル参加メンバーを取得
-async function getChannelMembers(channelId)
+async function getChannelMembersForExport(channelId)
 {
   var members = [];
   var cursor = "";
@@ -530,6 +532,125 @@ async function archiveChannel(channelId)
     resolve("success");
     });
 }
+
+
+// ==================== ユーザーの除外対応 ==================== //
+
+
+// メッセージに反応してアクションを発火
+app.message('kick_file_post_member', async ({ message, say }) => {
+  console.log("Start kick file post member");
+
+  // 対象のチャンネル一覧を取得
+  const targetChannelIds = await filterTargetMemberChannelIds();
+
+  // ファイル投稿用ユーザーを全てのチャンネルから除外
+  await(async () => 
+  {
+    for await(channelId of targetChannelIds)
+    {
+      await kickTargetUser(channelId, process.env.SLACK_FILE_POST_MEMBER);
+    }
+  })();
+
+  console.log("Kick Completed!");
+});
+
+
+// 1. 対象ユーザーが参加しているチャンネル一覧を取得
+async function filterTargetMemberChannelIds()
+{
+  var channels = [];
+
+  var cursor = "";
+  while (true)
+  {
+      // チャンネル一覧の取得
+      const response = await app.client.conversations.list({
+       types: "public_channel,private_channel",
+       cursor: cursor,
+      });
+
+      channels = channels.concat(response.channels);
+
+      // 次のチャンネルが無ければ抜ける
+      if(response.response_metadata && response.response_metadata.next_cursor == "")
+      {
+        break;
+      }
+      console.log(`次のチャンネルがある${cursor}`);
+      cursor = response.response_metadata.next_cursor;
+  }
+
+  var result = [];
+
+  // メンバー一覧を取得して、対象ユーザーのチャンネルを精査
+  await(async () => 
+    {
+      for await(channel of channels)
+      {
+        // generalチャンネルは抜けることができないのでスキップ
+        if(channel.is_general == true)
+        {
+          continue;
+        }
+
+        // メンバーを調査して対象ユーザーが存在するかを判定
+        const members = await getChannelMembers(channel.id);
+        if(members.includes(process.env.SLACK_FILE_POST_MEMBER))
+        {
+          result.push(channel.id);
+        }
+      }
+    })();
+
+  return new Promise((resolve, reject) => {
+    resolve(result);
+    });
+}
+
+// 1.1 チャンネル参加メンバーを取得
+async function getChannelMembers(channelId)
+{
+  var members = [];
+  var cursor = "";
+  while (true)
+  {
+      // メンバー一覧の取得
+      const response = await app.client.conversations.members({
+        channel: channelId,
+        cursor: cursor,
+      });
+      members = members.concat(response.members);
+
+      // 次のメンバーが無ければ抜ける
+      if(response.response_metadata && response.response_metadata.next_cursor == "")
+      {
+        break;
+      }
+      console.log(`次のメンバーがある${cursor}`);
+      cursor = response.response_metadata.next_cursor;
+  }
+
+  return new Promise((resolve, reject) => {
+    resolve(members);
+    });
+}
+
+// 2. 対象ユーザーをキック
+async function kickTargetUser(channelId, userId)
+{
+  const response = await userApp.client.conversations.kick({
+    channel: channelId,
+    user: userId
+  })
+
+  return new Promise((resolve, reject) => {
+    resolve("success");
+    });
+}
+
+// ==================== アプリの起動 ==================== //
 
 (async () => {
   // アプリを起動します
